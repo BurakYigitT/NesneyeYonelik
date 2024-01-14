@@ -1,0 +1,367 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
+public abstract class Person
+{
+    protected internal string ad;
+    protected internal string soyad;
+    protected internal string kullanici_adi;
+    protected internal string sifre;
+    public bool IsTeacher { get; protected set; }
+
+    public Person(string ad, string soyad, string kullanici_adi, string sifre)
+    {
+        this.ad = ad;
+        this.soyad = soyad;
+        this.kullanici_adi = kullanici_adi;
+        this.sifre = sifre;
+    }
+
+    public virtual bool GirisYap(string girilenKullaniciAdi)
+    {
+        Console.WriteLine("Şifre: ");
+        string girilenSifre = GetHiddenConsoleInput();
+
+        if (kullanici_adi == girilenKullaniciAdi && sifre == girilenSifre)
+        {
+            Console.WriteLine("Giriş başarılı!");
+            return true;
+        }
+        else
+        {
+            Console.WriteLine("Kullanıcı adı veya şifre hatalı!");
+            return false;
+        }
+    }
+
+    private string GetHiddenConsoleInput()
+    {
+        string input = "";
+        ConsoleKeyInfo key;
+
+        do
+        {
+            key = Console.ReadKey(true);
+
+            if (key.Key != ConsoleKey.Backspace && key.Key != ConsoleKey.Enter)
+            {
+                input += key.KeyChar;
+                Console.Write("*");
+            }
+            else if (key.Key == ConsoleKey.Backspace && input.Length > 0)
+            {
+                input = input.Substring(0, (input.Length - 1));
+                Console.Write("\b \b");
+            }
+        } while (key.Key != ConsoleKey.Enter);
+
+        Console.WriteLine();
+        return input;
+    }
+}
+
+public abstract class Student : Person
+{
+    protected internal Dictionary<string, int> devamsizliklar = new Dictionary<string, int>();
+    protected internal Teacher assignedTeacher; // Added this field
+
+    public Student(string ad, string soyad, string ogrenci_id, string kullanici_adi, string sifre)
+        : base(ad, soyad, kullanici_adi, sifre)
+    {
+        LoadAttendanceRecords();
+    }
+
+    private void LoadAttendanceRecords()
+    {
+        string fileName = $"{kullanici_adi}_attendance.txt";
+        if (File.Exists(fileName))
+        {
+            string[] lines = File.ReadAllLines(fileName);
+            foreach (var line in lines)
+            {
+                string[] parts = line.Split(',');
+                if (parts.Length == 2)
+                {
+                    string lesson = parts[0];
+                    int attendanceCount;
+                    if (int.TryParse(parts[1], out attendanceCount))
+                    {
+                        devamsizliklar.Add(lesson, attendanceCount);
+                    }
+                }
+            }
+        }
+    }
+
+    public void SaveAttendanceRecords()
+    {
+        string fileName = $"{kullanici_adi}_attendance.txt";
+        List<string> lines = devamsizliklar.Select(kv => $"{kv.Key},{kv.Value}").ToList();
+        File.WriteAllLines(fileName, lines);
+    }
+
+    public void AssignToTeacher(Teacher teacher)
+    {
+        assignedTeacher = teacher;
+    }
+
+    public abstract void DevamsizlikKaydet(string ders);
+    public abstract void DevamsizlikGoster();
+
+    public void EksiltDevamsizlik()
+    {
+        Console.WriteLine("Eksiltmek istediğiniz dersin adını girin: ");
+        string eksiltilecekDers = Console.ReadLine();
+
+        if (devamsizliklar.ContainsKey(eksiltilecekDers))
+        {
+            Console.WriteLine($"Mevcut devamsızlık sayısı: {devamsizliklar[eksiltilecekDers]}");
+
+            Console.WriteLine("Eksiltmek istediğiniz devamsızlık sayısını girin: ");
+            int eksiltmeSayisi;
+            if (int.TryParse(Console.ReadLine(), out eksiltmeSayisi))
+            {
+                int eksilenDevamsizlik = Math.Min(devamsizliklar[eksiltilecekDers], eksiltmeSayisi);
+                devamsizliklar[eksiltilecekDers] -= eksilenDevamsizlik;
+
+                Console.WriteLine($"{eksilenDevamsizlik} devamsızlık eksiltildi.");
+            }
+            else
+            {
+                Console.WriteLine("Geçersiz giriş. Eksiltme işlemi iptal edildi.");
+            }
+        }
+        else
+        {
+            Console.WriteLine($"{eksiltilecekDers} dersi için kayıtlı devamsızlık bulunamadı.");
+        }
+
+        SaveAttendanceRecords();
+    }
+
+    public void DevamsizliklariGoruntule()
+    {
+        Console.WriteLine($"{ad} {soyad} adlı öğrencinin devamsızlık kayıtları:");
+
+        foreach (var entry in devamsizliklar)
+        {
+            Console.WriteLine($"{entry.Key} dersi: {entry.Value} devamsızlık");
+        }
+    }
+}
+
+public class LisansOgrencisi : Student
+{
+    private const int max_devamsizlik = 30;
+
+    public LisansOgrencisi(string ad, string soyad, string ogrenci_id, string kullanici_adi, string sifre)
+        : base(ad, soyad, ogrenci_id, kullanici_adi, sifre)
+    {
+    }
+
+    public override void DevamsizlikKaydet(string ders)
+    {
+        if (!devamsizliklar.ContainsKey(ders))
+        {
+            devamsizliklar.Add(ders, 1);
+        }
+        else
+        {
+            devamsizliklar[ders]++;
+        }
+
+        if (devamsizliklar[ders] <= max_devamsizlik)
+        {
+            Console.WriteLine($"{ad} {soyad} adlı lisans öğrencisi, {ders} dersine devamsızlık kaydetti.");
+        }
+        else
+        {
+            Console.WriteLine($"{ad} {soyad} adlı lisans öğrencisi, maksimum devamsızlık sayısına ulaştı!");
+            devamsizliklar[ders] = max_devamsizlik;
+        }
+
+        SaveAttendanceRecords();
+    }
+
+    public override void DevamsizlikGoster()
+    {
+        int totalDevamsizlik = devamsizliklar.Values.Sum();
+        Console.WriteLine($"{ad} {soyad} adlı lisans öğrencisinin toplam devamsızlık sayısı: {totalDevamsizlik}/{max_devamsizlik}");
+        EksiltDevamsizlik(); // Devamsızlıkları eksiltme kontrolü
+    }
+}
+
+public class YuksekLisansOgrencisi : Student
+{
+    private const int max_devamsizlik = 15;
+
+    public YuksekLisansOgrencisi(string ad, string soyad, string ogrenci_id, string kullanici_adi, string sifre)
+        : base(ad, soyad, ogrenci_id, kullanici_adi, sifre)
+    {
+    }
+
+    public override void DevamsizlikKaydet(string ders)
+    {
+        if (!devamsizliklar.ContainsKey(ders))
+        {
+            devamsizliklar.Add(ders, 1);
+        }
+        else
+        {
+            devamsizliklar[ders]++;
+        }
+
+        if (devamsizliklar[ders] <= max_devamsizlik)
+        {
+            Console.WriteLine($"{ad} {soyad} adlı yüksek lisans öğrencisi, {ders} dersine devamsızlık kaydetti.");
+        }
+        else
+        {
+            Console.WriteLine($"{ad} {soyad} adlı yüksek lisans öğrencisi, maksimum devamsızlık sayısına ulaştı!");
+            devamsizliklar[ders] = max_devamsizlik;
+        }
+
+        SaveAttendanceRecords();
+    }
+
+    public override void DevamsizlikGoster()
+    {
+        int totalDevamsizlik = devamsizliklar.Values.Sum();
+        Console.WriteLine($"{ad} {soyad} adlı yüksek lisans öğrencisinin toplam devamsızlık sayısı: {totalDevamsizlik}/{max_devamsizlik}");
+        EksiltDevamsizlik(); // Devamsızlıkları eksiltme kontrolü
+    }
+}
+
+public class Teacher : Person
+{
+    private Dictionary<string, Student> students = new Dictionary<string, Student>();
+
+    public Teacher(string ad, string soyad, string kullanici_adi, string sifre)
+        : base(ad, soyad, kullanici_adi, sifre)
+    {
+        IsTeacher = true;
+    }
+
+    public void AddStudent(Student student)
+    {
+        students.Add(student.kullanici_adi, student);
+        student.AssignToTeacher(this);
+    }
+
+    public void ShowStudentList()
+    {
+        Console.WriteLine("Öğrenci Listesi:");
+        foreach (var student in students.Values)
+        {
+            Console.WriteLine($"{student.ad} {student.soyad} - Kullanıcı Adı: {student.kullanici_adi}");
+        }
+    }
+
+    public void TakeAttendance(string studentUsername, string lesson)
+    {
+        if (students.ContainsKey(studentUsername))
+        {
+            students[studentUsername].DevamsizlikKaydet(lesson);
+        }
+        else
+        {
+            Console.WriteLine("Öğrenci bulunamadı!");
+        }
+    }
+
+    public void EksiltDevamsizlik()
+    {
+        Console.WriteLine("Eksiltmek istediğiniz öğrencinin kullanıcı adını girin: ");
+        string studentUsername = Console.ReadLine();
+
+        if (students.ContainsKey(studentUsername))
+        {
+            students[studentUsername].EksiltDevamsizlik();
+        }
+        else
+        {
+            Console.WriteLine("Öğrenci bulunamadı!");
+        }
+    }
+
+    public void DevamsizliklariGoruntule()
+    {
+        Console.WriteLine("Öğrencinin devamsızlık kayıtlarını görüntülemek istediğiniz kullanıcı adını girin: ");
+        string studentUsername = Console.ReadLine();
+
+        if (students.ContainsKey(studentUsername))
+        {
+            students[studentUsername].DevamsizliklariGoruntule();
+        }
+        else
+        {
+            Console.WriteLine("Öğrenci bulunamadı!");
+        }
+    }
+
+    public override bool GirisYap(string girilenKullaniciAdi)
+    {
+        // Teacher-specific login logic can be added here if needed.
+        return base.GirisYap(girilenKullaniciAdi);
+    }
+}
+
+class Program
+{
+    static void Main(string[] args)
+    {
+        Teacher teacher = new Teacher("Öğretmen", "Öğretmensoyadi", "teacher", "teacher.123");
+        LisansOgrencisi lisansOgrenci = new LisansOgrencisi("Burak", "Taşpınar", "1001", "211141029", "burak.123");
+        YuksekLisansOgrencisi yuksekLisansOgrenci = new YuksekLisansOgrencisi("Deniz", "Kara", "2001", "deniz", "deniz.123");
+
+        teacher.AddStudent(lisansOgrenci);
+        teacher.AddStudent(yuksekLisansOgrenci);
+
+        Console.WriteLine("Kullanıcı Adı: ");
+        string username = Console.ReadLine();
+
+        if (teacher.GirisYap(username) && teacher.IsTeacher)
+        {
+            Console.WriteLine("Başarıyla giriş yapıldı.");
+
+            Console.WriteLine("Yapmak istediğiniz işlemi seçin:");
+            Console.WriteLine("1. Öğrenci Listesini Görüntüle");
+            Console.WriteLine("2. Devamsızlık Kaydı Yap");
+            Console.WriteLine("3. Devamsızlıkları Görüntüle");
+            Console.WriteLine("4. Devamsızlıkları Eksilt");
+
+            string operation = Console.ReadLine();
+
+            switch (operation.ToLower())
+            {
+                case "1":
+                    teacher.ShowStudentList();
+                    break;
+                case "2":
+                    Console.WriteLine("Öğrenci Kullanıcı Adı: ");
+                    string studentUsername = Console.ReadLine();
+
+                    Console.WriteLine("Ders Adı: ");
+                    string lesson = Console.ReadLine();
+
+                    teacher.TakeAttendance(studentUsername, lesson);
+                    break;
+                case "3":
+                    teacher.DevamsizliklariGoruntule();
+                    break;
+                case "4":
+                    teacher.EksiltDevamsizlik();
+                    break;
+                default:
+                    Console.WriteLine("Geçersiz işlem!");
+                    break;
+            }
+        }
+        else
+        {
+            Console.WriteLine("Kullanıcı adı veya şifre hatalı veya bu hesap bir öğretmen hesabı değil!");
+        }
+    }
+}
